@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build: .
+    ports:
+      - "0.0.0.0:8000:8000"  # Explicitly bind to all interfaces
+    volumes:
+      - ./app:/app/app
+      - ./get_images:/app/get_images  # Mount get_images directory for local access
+    environment:
+      - ENV=development
+    restart: unless-stopped
+    depends_on:
+      - cache
+
+  cache:
+    image: redis:alpine
+    ports:
+      - "0.0.0.0:6379:6379"  # Explicitly bind to all interfaces
+    restart: unless-stopped

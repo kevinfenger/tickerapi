@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+httpx
+aiohttp
+python-multipart
+cachetools
+redis
+requests
+Pillow
