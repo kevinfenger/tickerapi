@@ -1,3 +1,4 @@
+
 # FastAPI Sports Scores API
 
 A FastAPI application that retrieves live sports scores from ESPN's API with caching, pagination, and multi-sport support.
