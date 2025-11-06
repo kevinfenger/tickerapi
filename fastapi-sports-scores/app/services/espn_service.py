@@ -92,14 +92,25 @@ class ESPNService:
         
         team_info = competitor.get('team', {})
         
+        # Get original abbreviation and apply custom replacements
+        original_abbreviation = team_info.get('abbreviation', 'UNK')
+        abbreviation = self._convert_team_abbreviation(original_abbreviation)
+        
         return {
             'name': team_info.get('displayName', 'Unknown'),  # Full team name (e.g., "Montana State Bobcats")
             'nickname': team_info.get('name', team_info.get('displayName', 'Unknown')),  # Team nickname (e.g., "Bobcats")
-            'abbreviation': team_info.get('abbreviation', 'UNK'),  # Team abbreviation (e.g., "MSU")
+            'abbreviation': abbreviation,  # Team abbreviation with custom conversions
             'score': competitor.get('score', '0'),
             'conference': 'Unknown',  # Simplified - no longer trying to detect conference
             'rank': rank
         }
+    
+    def _convert_team_abbreviation(self, abbreviation: str) -> str:
+        """Convert specific team abbreviations to custom versions"""
+        abbreviation_conversions = {
+            "MONT": "dUMb"
+        }
+        return abbreviation_conversions.get(abbreviation, abbreviation)
 
     async def fetch_scores(self, sport: str, limit: int = 10) -> List[Dict]:
         """Fetch scores from ESPN API"""
@@ -250,7 +261,8 @@ class ESPNService:
             
             for competitor in competitors:
                 team_name = competitor.get('team', {}).get('displayName', 'Unknown')
-                team_abbr = competitor.get('team', {}).get('abbreviation', 'UNK')
+                original_team_abbr = competitor.get('team', {}).get('abbreviation', 'UNK')
+                team_abbr = self._convert_team_abbreviation(original_team_abbr)
                 
                 # Get leaders from competitor statistics
                 leaders = competitor.get('leaders', [])
