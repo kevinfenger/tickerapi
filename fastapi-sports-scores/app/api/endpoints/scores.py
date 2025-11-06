@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Request
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 from app.services.espn_service import ESPNService
 from app.core.cache import Cache
@@ -71,6 +71,73 @@ def convert_sport_format(sport: str) -> str:
     
     # Default conversion: replace underscores with slashes
     return sport.replace('_', '/')
+
+def build_pagination_response(
+    request: Request,
+    data: List[Dict[str, Any]],
+    page: int,
+    page_size: int,
+    total_items: int,
+    base_params: Dict[str, Any],
+    force_refresh: bool = False
+) -> Dict[str, Any]:
+    """
+    Build a standardized pagination response with proper URL construction.
+    
+    Args:
+        request: FastAPI request object
+        data: The paginated data for this page
+        page: Current page number
+        page_size: Number of items per page
+        total_items: Total number of items across all pages
+        base_params: Base query parameters to include in pagination URLs
+        force_refresh: Whether to include force_refresh in URLs
+    
+    Returns:
+        Dictionary with pagination metadata and URLs
+    """
+    # Calculate pagination metadata
+    total_pages = (total_items + page_size - 1) // page_size
+    has_next = page < total_pages
+    has_previous = page > 1
+    
+    # Get scheme and host with reverse proxy support
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    base_url = f"{scheme}://{host}{request.url.path}"
+    
+    # Build query parameters for URLs
+    def build_url_params(target_page: int) -> str:
+        params = [f"page={target_page}", f"page_size={page_size}"]
+        
+        # Add base parameters
+        for key, value in base_params.items():
+            if value is not None:
+                params.append(f"{key}={value}")
+        
+        # Add force_refresh if needed
+        if force_refresh:
+            params.append("force_refresh=true")
+            
+        return "&".join(params)
+    
+    # Build pagination URLs
+    next_page_url = f"{base_url}?{build_url_params(page + 1)}" if has_next else None
+    prev_page_url = f"{base_url}?{build_url_params(page - 1)}" if has_previous else None
+    
+    return {
+        "data": data,
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_scores": total_items,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_previous": has_previous,
+            "next_page_url": next_page_url,
+            "previous_page_url": prev_page_url
+        }
+    }
 
 def get_conference_groups() -> Dict[str, Dict[str, List[int]]]:
     """Get the conference to ESPN group mapping"""
@@ -188,40 +255,17 @@ async def get_scores(
     if not paginated_scores and page > 1:
         raise HTTPException(status_code=404, detail="Page not found")
     
-    # Calculate total pages
-    total_pages = (total_scores + page_size - 1) // page_size
-    
-    # Build next page URL if there's a next page
-    next_page_url = None
-    if page < total_pages:
-        # Properly construct base URL with port
-        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
-        next_page_url = f"{base_url}?sport={sport}&page={page + 1}&page_size={page_size}"
-        if force_refresh:
-            next_page_url += "&force_refresh=true"
-    
-    # Build previous page URL if there's a previous page
-    prev_page_url = None
-    if page > 1:
-        # Properly construct base URL with port
-        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
-        prev_page_url = f"{base_url}?sport={sport}&page={page - 1}&page_size={page_size}"
-        if force_refresh:
-            prev_page_url += "&force_refresh=true"
-    
-    return {
-        "data": paginated_scores,
-        "pagination": {
-            "current_page": page,
-            "page_size": page_size,
-            "total_scores": total_scores,
-            "total_pages": total_pages,
-            "has_next": page < total_pages,
-            "has_previous": page > 1,
-            "next_page_url": next_page_url,
-            "previous_page_url": prev_page_url
-        }
-    }
+    # Build pagination response
+    base_params = {"sport": sport}
+    return build_pagination_response(
+        request=request,
+        data=paginated_scores,
+        page=page,
+        page_size=page_size,
+        total_items=total_scores,
+        base_params=base_params,
+        force_refresh=force_refresh
+    )
 
 @router.get("/sports")
 async def get_available_sports() -> Dict[str, Any]:
@@ -327,25 +371,27 @@ async def get_conference_games(
             total_scores = len(cached_result)
             total_pages = (total_scores + page_size - 1) // page_size
             
-            return {
-                "data": paginated_data,
-                "pagination": {
-                    "current_page": page,
-                    "page_size": page_size,
-                    "total_scores": total_scores,
-                    "total_pages": total_pages,
-                    "has_next": page < total_pages,
-                    "has_previous": page > 1,
-                    "next_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page + 1}&page_size={page_size}" if page < total_pages else None,
-                    "previous_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page - 1}&page_size={page_size}" if page > 1 else None
-                },
-                "info": {
-                    "conference": conference_name.title(),
-                    "sport": sport,
-                    "group_ids_used": group_ids,
-                    "cache_duration": "5 minutes"
-                }
+            # Build pagination response for cached data
+            base_params = {"sport": sport}
+            pagination_response = build_pagination_response(
+                request=request,
+                data=paginated_data,
+                page=page,
+                page_size=page_size,
+                total_items=total_scores,
+                base_params=base_params,
+                force_refresh=force_refresh
+            )
+            
+            # Add conference-specific info to the response
+            pagination_response["info"] = {
+                "conference": conference_name.title(),
+                "sport": sport,
+                "group_ids_used": group_ids,
+                "cache_duration": "5 minutes"
             }
+            
+            return pagination_response
     
     # Fetch games from all group IDs for this conference
     all_conference_games = []
@@ -380,26 +426,28 @@ async def get_conference_games(
     total_scores = len(unique_games)
     total_pages = (total_scores + page_size - 1) // page_size
     
-    return {
-        "data": paginated_data,
-        "pagination": {
-            "current_page": page,
-            "page_size": page_size,
-            "total_scores": total_scores,
-            "total_pages": total_pages,
-            "has_next": page < total_pages,
-            "has_previous": page > 1,
-            "next_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page + 1}&page_size={page_size}" if page < total_pages else None,
-            "previous_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page - 1}&page_size={page_size}" if page > 1 else None
-        },
-        "info": {
-            "conference": conference_name.title(),
-            "sport": sport,
-            "group_ids_used": group_ids,
-            "total_games_found": total_scores,
-            "cache_duration": "5 minutes"
-        }
+    # Build pagination response for fresh data
+    base_params = {"sport": sport}
+    pagination_response = build_pagination_response(
+        request=request,
+        data=paginated_data,
+        page=page,
+        page_size=page_size,
+        total_items=total_scores,
+        base_params=base_params,
+        force_refresh=force_refresh
+    )
+    
+    # Add conference-specific info to the response
+    pagination_response["info"] = {
+        "conference": conference_name.title(),
+        "sport": sport,
+        "group_ids_used": group_ids,
+        "total_games_found": total_scores,
+        "cache_duration": "5 minutes"
     }
+    
+    return pagination_response
 
 @router.get("/live")
 async def get_live_scores(
@@ -542,56 +590,32 @@ async def get_live_scores(
     if not paginated_scores and page > 1:
         raise HTTPException(status_code=404, detail="Page not found")
     
-    # Calculate total pages
-    total_pages = (total_scores + page_size - 1) // page_size
+    # Build pagination response
+    base_params = {}
+    if sport:
+        base_params["sport"] = sport
+    if detailed_conferences:
+        base_params["detailed_conferences"] = detailed_conferences
+        
+    pagination_response = build_pagination_response(
+        request=request,
+        data=paginated_scores,
+        page=page,
+        page_size=page_size,
+        total_items=total_scores,
+        base_params=base_params,
+        force_refresh=force_refresh
+    )
     
-    # Build next page URL if there's a next page
-    next_page_url = None
-    if page < total_pages:
-        # Properly construct base URL with port
-        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
-        params = [f"page={page + 1}", f"page_size={page_size}"]
-        if sport:
-            params.append(f"sport={sport}")
-        if detailed_conferences:
-            params.append(f"detailed_conferences={detailed_conferences}")
-        if force_refresh:
-            params.append("force_refresh=true")
-        next_page_url = f"{base_url}?{'&'.join(params)}"
-    
-    # Build previous page URL if there's a previous page
-    prev_page_url = None
-    if page > 1:
-        # Properly construct base URL with port
-        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
-        params = [f"page={page - 1}", f"page_size={page_size}"]
-        if sport:
-            params.append(f"sport={sport}")
-        if detailed_conferences:
-            params.append(f"detailed_conferences={detailed_conferences}")
-        if force_refresh:
-            params.append("force_refresh=true")
-        prev_page_url = f"{base_url}?{'&'.join(params)}"
-    
-    return {
-        "data": paginated_scores,
-        "pagination": {
-            "current_page": page,
-            "page_size": page_size,
-            "total_scores": total_scores,
-            "total_pages": total_pages,
-            "has_next": page < total_pages,
-            "has_previous": page > 1,
-            "next_page_url": next_page_url,
-            "previous_page_url": prev_page_url
-        },
-        "info": {
-            "description": "Live games or recently finished games (final games that started within the last 4 hours)",
-            "sports_checked": sports_to_check,
-            "cache_duration": "2 minutes",
-            "filter": f"Specific sport: {sport}" if sport else "All sports"
-        }
+    # Add live-specific info to the response
+    pagination_response["info"] = {
+        "description": "Live games or recently finished games (final games that started within the last 4 hours)",
+        "sports_checked": sports_to_check,
+        "cache_duration": "2 minutes",
+        "filter": f"Specific sport: {sport}" if sport else "All sports"
     }
+    
+    return pagination_response
 
 @router.get("/top_performers")
 async def get_top_performers(
