@@ -11,42 +11,58 @@ PASSTHROUGH = [(0, 0, 0)]  # Don't dither black
 
 def process(filename, output_8_bit=True, passthrough=PASSTHROUGH):
     """Apply LED optimization process"""
-    img = Image.open(filename).convert('RGB')
-    err_next_pixel = (0, 0, 0)
-    err_next_row = [(0, 0, 0) for _ in range(img.size[0])]
-    for row in range(img.size[1]):
-        for column in range(img.size[0]):
-            pixel = img.getpixel((column, row))
-            want = (math.pow(pixel[0] / 255.0, GAMMA) * 31.0,
-                    math.pow(pixel[1] / 255.0, GAMMA) * 63.0,
-                    math.pow(pixel[2] / 255.0, GAMMA) * 31.0)
-            if pixel in passthrough:
-                got = (pixel[0] >> 3,
-                       pixel[1] >> 2,
-                       pixel[2] >> 3)
-            else:
-                got = (min(max(int(err_next_pixel[0] * 0.5 +
-                                   err_next_row[column][0] * 0.25 +
-                                   want[0] + 0.5), 0), 31),
-                       min(max(int(err_next_pixel[1] * 0.5 +
-                                   err_next_row[column][1] * 0.25 +
-                                   want[1] + 0.5), 0), 63),
-                       min(max(int(err_next_pixel[2] * 0.5 +
-                                   err_next_row[column][2] * 0.25 +
-                                   want[2] + 0.5), 0), 31))
-            err_next_pixel = (want[0] - got[0],
-                              want[1] - got[1],
-                              want[2] - got[2])
-            err_next_row[column] = err_next_pixel
-            rgb565 = ((got[0] << 3) | (got[0] >> 2),
-                      (got[1] << 2) | (got[1] >> 4),
-                      (got[2] << 3) | (got[2] >> 2))
-            img.putpixel((column, row), rgb565)
+    try:
+        img = Image.open(filename).convert('RGB')
+        err_next_pixel = (0, 0, 0)
+        err_next_row = [(0, 0, 0) for _ in range(img.size[0])]
+        for row in range(img.size[1]):
+            for column in range(img.size[0]):
+                pixel = img.getpixel((column, row))
+                want = (math.pow(pixel[0] / 255.0, GAMMA) * 31.0,
+                        math.pow(pixel[1] / 255.0, GAMMA) * 63.0,
+                        math.pow(pixel[2] / 255.0, GAMMA) * 31.0)
+                if pixel in passthrough:
+                    got = (pixel[0] >> 3,
+                           pixel[1] >> 2,
+                           pixel[2] >> 3)
+                else:
+                    got = (min(max(int(err_next_pixel[0] * 0.5 +
+                                       err_next_row[column][0] * 0.25 +
+                                       want[0] + 0.5), 0), 31),
+                           min(max(int(err_next_pixel[1] * 0.5 +
+                                       err_next_row[column][1] * 0.25 +
+                                       want[1] + 0.5), 0), 63),
+                           min(max(int(err_next_pixel[2] * 0.5 +
+                                       err_next_row[column][2] * 0.25 +
+                                       want[2] + 0.5), 0), 31))
+                err_next_pixel = (want[0] - got[0],
+                                  want[1] - got[1],
+                                  want[2] - got[2])
+                err_next_row[column] = err_next_pixel
+                rgb565 = ((got[0] << 3) | (got[0] >> 2),
+                          (got[1] << 2) | (got[1] >> 4),
+                          (got[2] << 3) | (got[2] >> 2))
+                img.putpixel((column, row), rgb565)
 
-    if output_8_bit:
-        img = img.convert('P', palette=Image.ADAPTIVE)
+        if output_8_bit:
+            try:
+                img = img.convert('P', palette=Image.ADAPTIVE)
+            except Exception as e:
+                print(f"Warning: Could not convert to 8-bit palette: {e}")
+                # Continue with RGB version
 
-    img.save(filename.split('.')[0] + '.bmp')
+        img.save(filename.split('.')[0] + '.bmp')
+        
+    except Exception as e:
+        print(f"Error processing image {filename}: {e}")
+        # Fallback: simple resize and save
+        try:
+            simple_img = Image.open(filename).convert('RGB')
+            simple_img.save(filename.split('.')[0] + '.bmp')
+            print(f"Saved simple version of {filename}")
+        except Exception as fallback_error:
+            print(f"Fallback also failed: {fallback_error}")
+            raise
 
 def download_league_logo(name, url, directory):
     """Download and process a league logo"""
