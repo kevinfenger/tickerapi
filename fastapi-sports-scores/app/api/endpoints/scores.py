@@ -447,9 +447,9 @@ async def get_live_scores(
         # Fetch scores from all sports
         current_time = datetime.now(timezone.utc)
         
-        for sport in sports_to_check:
+        for espn_sport_format in sports_to_check:
             try:
-                scores = await espn_service.fetch_scores(sport=sport, limit=50)
+                scores = await espn_service.fetch_scores(sport=espn_sport_format, limit=50)
                 
                 # Filter for live games, recently finished games, or upcoming games within 18 hours
                 for score in scores:
@@ -460,13 +460,13 @@ async def get_live_scores(
                     if is_game_in_live_window(game_date, status, current_time):
                         
                         # Add sport info to the score data
-                        score['sport'] = sport
-                        score['sport_display'] = sport.replace('/', ' ').title().replace('Nba', 'NBA').replace('Nfl', 'NFL').replace('Mlb', 'MLB').replace('Nhl', 'NHL')
+                        score['sport'] = espn_sport_format
+                        score['sport_display'] = espn_sport_format.replace('/', ' ').title().replace('Nba', 'NBA').replace('Nfl', 'NFL').replace('Mlb', 'MLB').replace('Nhl', 'NHL')
                         all_live_scores.append(score)
                         
             except Exception as e:
                 # Continue with other sports if one fails
-                print(f"Error fetching {sport}: {e}")
+                print(f"Error fetching {espn_sport_format}: {e}")
                 continue
         
         # Fetch detailed conference games if requested
