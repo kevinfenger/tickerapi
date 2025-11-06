@@ -194,7 +194,8 @@ async def get_scores(
     # Build next page URL if there's a next page
     next_page_url = None
     if page < total_pages:
-        base_url = str(request.url.replace(query=None))
+        # Properly construct base URL with port
+        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
         next_page_url = f"{base_url}?sport={sport}&page={page + 1}&page_size={page_size}"
         if force_refresh:
             next_page_url += "&force_refresh=true"
@@ -202,7 +203,8 @@ async def get_scores(
     # Build previous page URL if there's a previous page
     prev_page_url = None
     if page > 1:
-        base_url = str(request.url.replace(query=None))
+        # Properly construct base URL with port
+        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
         prev_page_url = f"{base_url}?sport={sport}&page={page - 1}&page_size={page_size}"
         if force_refresh:
             prev_page_url += "&force_refresh=true"
@@ -282,6 +284,7 @@ async def get_conferences(
 
 @router.get("/conference/{conference_name}")
 async def get_conference_games(
+    request: Request,
     conference_name: str,
     sport: str = Query("basketball_mens-college", description="Sport type (basketball_mens-college, football_college)"),
     page: int = Query(1, description="Page number", ge=1),
@@ -333,8 +336,8 @@ async def get_conference_games(
                     "total_pages": total_pages,
                     "has_next": page < total_pages,
                     "has_previous": page > 1,
-                    "next_page_url": f"/api/conference/{conference_name}?sport={sport}&page={page + 1}&page_size={page_size}" if page < total_pages else None,
-                    "previous_page_url": f"/api/conference/{conference_name}?sport={sport}&page={page - 1}&page_size={page_size}" if page > 1 else None
+                    "next_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page + 1}&page_size={page_size}" if page < total_pages else None,
+                    "previous_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page - 1}&page_size={page_size}" if page > 1 else None
                 },
                 "info": {
                     "conference": conference_name.title(),
@@ -386,8 +389,8 @@ async def get_conference_games(
             "total_pages": total_pages,
             "has_next": page < total_pages,
             "has_previous": page > 1,
-            "next_page_url": f"/api/conference/{conference_name}?sport={sport}&page={page + 1}&page_size={page_size}" if page < total_pages else None,
-            "previous_page_url": f"/api/conference/{conference_name}?sport={sport}&page={page - 1}&page_size={page_size}" if page > 1 else None
+            "next_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page + 1}&page_size={page_size}" if page < total_pages else None,
+            "previous_page_url": f"{request.url.scheme}://{request.url.netloc}/api/conference/{conference_name}?sport={sport}&page={page - 1}&page_size={page_size}" if page > 1 else None
         },
         "info": {
             "conference": conference_name.title(),
@@ -545,7 +548,8 @@ async def get_live_scores(
     # Build next page URL if there's a next page
     next_page_url = None
     if page < total_pages:
-        base_url = str(request.url.replace(query=None))
+        # Properly construct base URL with port
+        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
         params = [f"page={page + 1}", f"page_size={page_size}"]
         if sport:
             params.append(f"sport={sport}")
@@ -558,7 +562,8 @@ async def get_live_scores(
     # Build previous page URL if there's a previous page
     prev_page_url = None
     if page > 1:
-        base_url = str(request.url.replace(query=None))
+        # Properly construct base URL with port
+        base_url = f"{request.url.scheme}://{request.url.netloc}{request.url.path}"
         params = [f"page={page - 1}", f"page_size={page_size}"]
         if sport:
             params.append(f"sport={sport}")
