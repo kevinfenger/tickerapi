@@ -390,7 +390,7 @@ class ESPNService:
                                 'home_team': home_team,
                                 'away_team': away_team,
                                 'venue': self._convert_venue_name(competition.get('venue', {}).get('fullName', 'Unknown Venue')),
-                                'top_performers': await self._get_top_performers(event, url.split('/')[-2] + '/' + url.split('/')[-1].split('?')[0])
+                                'top_performers': await self._get_top_performers(event, '/'.join(url.split('/')[-3:-1]))
                             }
                             scores_list.append(score_data)
                 else:
