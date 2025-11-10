@@ -22,7 +22,7 @@ def get_sport_priority(sport: str) -> int:
     }
     return sport_priorities.get(sport, 999)  # Default high number for unknown sports
 
-def is_game_in_live_window(game_date: datetime, status: str, current_time: datetime, tight_window: bool = False) -> bool:
+def is_game_in_live_window(game_date: datetime, status: str, current_time: datetime, tight_window: bool = False, collection_mode: bool = False) -> bool:
     """
     Check if a game should be included in the live endpoint.
     
@@ -31,10 +31,33 @@ def is_game_in_live_window(game_date: datetime, status: str, current_time: datet
         status: The game's status (e.g., 'final', 'scheduled', 'in progress')
         current_time: Current UTC time
         tight_window: If True, use a much tighter time window for prioritizing results
+        collection_mode: If True, use a very broad time window for collection requests
     
     Returns:
         True if the game should be included in live results
     """
+    if collection_mode:
+        # Use a broader window for collection requests - users want to see games from their collection
+        two_days_ago = current_time - timedelta(days=2)
+        two_days_from_now = current_time + timedelta(days=2)
+        
+        status_lower = status.lower()
+        
+        # Include all live games
+        if status_lower in ['in progress', 'halftime', '1st quarter', '2nd quarter', '3rd quarter', '4th quarter', 
+                           '1st half', '2nd half', 'overtime', 'live', 'active']:
+            return True
+        
+        # Include finals from the past 2 days
+        if status_lower == 'final' and game_date >= two_days_ago:
+            return True
+        
+        # Include scheduled games within the next 2 days
+        if status_lower == 'scheduled' and game_date <= two_days_from_now:
+            return True
+            
+        return False
+    
     if tight_window:
         # Use a much tighter window when we want to prioritize recent/current games
         four_hours_ago = current_time - timedelta(hours=4)
@@ -192,7 +215,7 @@ def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
             "college_football": [81]
         },
         "college_football": {
-            "college_football": [90]  # Group 90 is all NCAA football (FBS + FCS)
+            "college_football": [90]  # Group 90 is all NCAA football (FBS + FCS)  
         },
         "cfb_top_25": {
             "college_football": ["top25"]  # Special identifier for top 25 filtering
@@ -211,7 +234,6 @@ def get_basic_sport_filters() -> Dict[str, str]:
         'nhl': 'hockey/nhl',
         'cfb': 'football/college-football',
         'mcbb': 'basketball/mens-college-basketball',
-        'college_football': 'football/college-football',
         'mens_college_basketball': 'basketball/mens-college-basketball',
         'womens_college_basketball': 'basketball/womens-college-basketball',
         'wnba': 'basketball/wnba',
@@ -631,8 +653,8 @@ async def get_live_scores(
                             status = score['status']
                             
                             # Use helper function to check if game should be included
-                            # Use tight window when we have conference preferences to prioritize recent/current games
-                            if is_game_in_live_window(game_date, status, current_time, tight_window=use_tight_window):
+                            # Use collection mode when collections are specified, tight window for generic requests
+                            if is_game_in_live_window(game_date, status, current_time, tight_window=use_tight_window, collection_mode=(collections is not None)):
                                 
                                 # Add sport info to the score data
                                 score['sport'] = espn_sport_format
