@@ -1,6 +1,9 @@
 import aiohttp
 import asyncio
+import logging
 from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class ESPNService:
     def __init__(self, api_key: str = None):
@@ -50,6 +53,99 @@ class ESPNService:
         except Exception as e:
             print(f"Error processing event: {e}")
             return None
+
+    async def _get_performers_from_summary(self, event_id: str, sport: str) -> List[Dict[str, Any]]:
+        """Fetch live game performers from ESPN game summary endpoint"""
+        url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/summary?event={event_id}"
+        
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; Sports-API/1.0)"
+        }
+        
+        performers = []
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        # For NFL, get live stats from boxscore.players
+                        boxscore = data.get('boxscore', {})
+                        players_data = boxscore.get('players', [])
+                        
+                        for team_players in players_data:
+                            team_info = team_players.get('team', {})
+                            team_name = team_info.get('displayName', 'Unknown')
+                            original_team_abbr = team_info.get('abbreviation', 'UNK')
+                            team_abbr = self._convert_team_abbreviation(original_team_abbr)
+                            
+                            statistics = team_players.get('statistics', [])
+                            
+                            # Focus on key offensive categories for top performers
+                            key_categories = ['passing', 'rushing', 'receiving']
+                            
+                            for stat_category in statistics:
+                                category_name = stat_category.get('name', '')
+                                
+                                if category_name in key_categories:
+                                    athletes = stat_category.get('athletes', [])
+                                    keys = stat_category.get('keys', [])
+                                    
+                                    # Get top performers in this category
+                                    for athlete in athletes[:2]:  # Top 2 per category per team
+                                        athlete_info = athlete.get('athlete', {})
+                                        player_name = athlete_info.get('displayName', 'Unknown')
+                                        stats = athlete.get('stats', [])
+                                        
+                                        if stats and len(stats) > 1:
+                                            # Get the main stat (usually yards - index 1)
+                                            main_stat_value = stats[1] if len(stats) > 1 else stats[0]
+                                            
+                                            # Skip if no meaningful stats
+                                            if not main_stat_value or main_stat_value == '0' or main_stat_value == 0:
+                                                continue
+                                            
+                                            # Convert to number if it's a string
+                                            try:
+                                                if isinstance(main_stat_value, str):
+                                                    main_stat_value = float(main_stat_value)
+                                            except (ValueError, TypeError):
+                                                continue
+                                            
+                                            # Format stat description based on category
+                                            if category_name == 'passing':
+                                                stat_description = f"{main_stat_value} passing yards"
+                                                stat_category_display = "Pass Yds"
+                                            elif category_name == 'rushing':
+                                                stat_description = f"{main_stat_value} rushing yards"
+                                                stat_category_display = "Rush Yds"
+                                            elif category_name == 'receiving':
+                                                stat_description = f"{main_stat_value} receiving yards"
+                                                stat_category_display = "Rec Yds"
+                                            else:
+                                                stat_description = f"{main_stat_value} {category_name}"
+                                                stat_category_display = category_name.title()
+                                            
+                                            performer = {
+                                                'player_name': player_name,
+                                                'team': team_name,
+                                                'team_abbr': team_abbr,
+                                                'stat_category': stat_category_display,
+                                                'value': main_stat_value,
+                                                'description': stat_description
+                                            }
+                                            performers.append(performer)
+                        
+                        return performers[:8]  # Limit to top 8 performers
+                    else:
+                        print(f"Failed to fetch summary for {event_id}: HTTP {response.status}")
+                        return []
+                        
+        except Exception as e:
+            print(f"Error fetching summary performers for {event_id}: {e}")
+            return []
 
     async def _enrich_with_detailed_status(self, scores, sport: str = "basketball/mens-college-basketball"):
         """Enrich in-progress games with detailed status information."""
@@ -167,6 +263,56 @@ class ESPNService:
                     print(f"ESPN API error for group {group_id}: {response.status}")
                     return []
     
+    async def fetch_top25_games(self, sport: str, division: str = None) -> List[Dict]:
+        """Fetch games involving top 25 teams using individual game summaries"""
+        logger.info(f"Fetching top 25 games for {sport}")
+        
+        # First get all games from scoreboard
+        scoreboard_url = f"http://site.api.espn.com/apis/site/v2/sports/{sport}/scoreboard"
+        if division:
+            scoreboard_url += f"?groups={division}"
+            
+        async with aiohttp.ClientSession() as session:
+            async with session.get(scoreboard_url) as response:
+                if response.status != 200:
+                    logger.error(f"Failed to fetch scoreboard: {response.status}")
+                    return []
+                
+                data = await response.json()
+                games = data.get('events', [])
+                
+                # Check games directly from scoreboard for ranking info
+                top25_games = []
+                for game in games:
+                    has_ranked_team = False
+                    
+                    # Check if any competitor is ranked in top 25
+                    # Look in the scoreboard data for curatedRank.current
+                    competitions = game.get('competitions', [])
+                    for competition in competitions:
+                        competitors = competition.get('competitors', [])
+                        for competitor in competitors:
+                            # Check for ranking in curatedRank.current (scoreboard API structure)
+                            curated_rank = competitor.get('curatedRank', {})
+                            rank = curated_rank.get('current') if curated_rank else None
+                            
+                            if rank is not None and isinstance(rank, int) and 1 <= rank <= 25 and rank != 99:
+                                has_ranked_team = True
+                                break
+                        
+                        if has_ranked_team:
+                            break
+                    
+                    if has_ranked_team:
+                        # Transform the game data
+                        transformed_game = self._transform_event(game)
+                        if transformed_game:
+                            top25_games.append(transformed_game)
+                
+                logger.info(f"Found {len(top25_games)} top 25 games")
+                return top25_games
+    
+
     def _transform_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Transform ESPN event data to our standard format"""
         competitions = event.get('competitions', [])
@@ -259,6 +405,23 @@ class ESPNService:
             competition = competitions[0]
             competitors = competition.get('competitors', [])
             
+            # For NFL games that are in progress, always try to fetch live stats
+            # from the game summary endpoint regardless of leaders data
+            if 'nfl' in sport:
+                status = competition.get('status', {}).get('type', {}).get('description', '')
+                if status in ['In Progress', 'Halftime', '1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter']:
+                    event_id = event.get('id')
+                    if event_id:
+                        # Use correct ESPN API sport format for summary endpoint
+                        summary_sport = 'football/nfl' if 'nfl' in sport else sport
+                        summary_performers = await self._get_performers_from_summary(event_id, summary_sport)
+                        if summary_performers:
+                            return summary_performers
+            
+            # Check if we have leaders data in the main response for other sports
+            has_leaders = any(competitor.get('leaders', []) for competitor in competitors)
+            
+            # Process standard leaders data (works for most sports)
             for competitor in competitors:
                 team_name = competitor.get('team', {}).get('displayName', 'Unknown')
                 original_team_abbr = competitor.get('team', {}).get('abbreviation', 'UNK')

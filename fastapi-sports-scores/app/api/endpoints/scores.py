@@ -22,7 +22,7 @@ def get_sport_priority(sport: str) -> int:
     }
     return sport_priorities.get(sport, 999)  # Default high number for unknown sports
 
-def is_game_in_live_window(game_date: datetime, status: str, current_time: datetime) -> bool:
+def is_game_in_live_window(game_date: datetime, status: str, current_time: datetime, tight_window: bool = False) -> bool:
     """
     Check if a game should be included in the live endpoint.
     
@@ -30,10 +30,33 @@ def is_game_in_live_window(game_date: datetime, status: str, current_time: datet
         game_date: The game's start time (UTC)
         status: The game's status (e.g., 'final', 'scheduled', 'in progress')
         current_time: Current UTC time
+        tight_window: If True, use a much tighter time window for prioritizing results
     
     Returns:
         True if the game should be included in live results
     """
+    if tight_window:
+        # Use a much tighter window when we want to prioritize recent/current games
+        four_hours_ago = current_time - timedelta(hours=4)
+        six_hours_from_now = current_time + timedelta(hours=6)
+        
+        status_lower = status.lower()
+        
+        # Always include live games
+        if status_lower in ['in progress', 'halftime', '1st quarter', '2nd quarter', '3rd quarter', '4th quarter', 
+                           '1st half', '2nd half', 'overtime', 'live', 'active']:
+            return True
+        
+        # Only recent finals (within 4 hours) and near-future games (within 6 hours)
+        if status_lower == 'final' and game_date >= four_hours_ago:
+            return True
+        
+        if status_lower == 'scheduled' and game_date <= six_hours_from_now:
+            return True
+            
+        return False
+    
+    # Standard window for normal operation
     # Use 12 hours for final games since we only have start time, not end time
     twelve_hours_ago = current_time - timedelta(hours=12)
     
@@ -139,7 +162,7 @@ def build_pagination_response(
         }
     }
 
-def get_conference_groups() -> Dict[str, Dict[str, List[int]]]:
+def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
     """Get the conference to ESPN group mapping"""
     return {
         "big sky": {
@@ -159,7 +182,7 @@ def get_conference_groups() -> Dict[str, Dict[str, List[int]]]:
         "mvfc": {
             "football_college": [21]  # Group 21 is MVFC for football
         },
-        "missouri valley football": {  # Allow full name version
+        "missouri_valley": {  # Allow full name version
             "football_college": [21]
         },
         "fcs": {
@@ -168,8 +191,14 @@ def get_conference_groups() -> Dict[str, Dict[str, List[int]]]:
         "fcs football": {  # Allow full name version
             "football_college": [81]
         },
-        "all": {
+        "football_college": {
             "football_college": [90]  # Group 90 is all NCAA football (FBS + FCS)
+        },
+        "cfb_top_25": {
+            "football_college": ["top25"]  # Special identifier for top 25 filtering
+        },
+        "mcbb_top_25": {
+            "basketball_mens-college": ["top25"]  # Special identifier for men's college basketball top 25 filtering
         }
     }
 
@@ -337,25 +366,25 @@ async def get_conference_games(
 ):
     """Get games for a specific conference using ESPN groups parameter"""
     
-    # Get conference groups mapping
-    conference_groups = get_conference_groups()
+    # Get collection groups mapping
+    collection_groups = get_collection_groups()
     
     conference_key = conference_name.lower().replace("-", " ").replace("_", " ")
     
-    if conference_key not in conference_groups:
+    if conference_key not in collection_groups:
         raise HTTPException(
             status_code=404, 
-            detail=f"Conference '{conference_name}' not supported. Available: {list(conference_groups.keys())}"
+            detail=f"Conference '{conference_name}' not supported. Available: {list(collection_groups.keys())}"
         )
     
-    if sport not in conference_groups[conference_key]:
+    if sport not in collection_groups[conference_key]:
         raise HTTPException(
             status_code=404,
             detail=f"Sport '{sport}' not available for conference '{conference_name}'"
         )
     
     # Get the group IDs for this conference/sport combination
-    group_ids = conference_groups[conference_key][sport]
+    group_ids = collection_groups[conference_key][sport]
     
     cache_key = f"conference:{conference_key}:{sport}"
     
@@ -456,9 +485,9 @@ async def get_live_scores(
     page: int = Query(1, ge=1, description="Page number (starts from 1)"),
     page_size: int = Query(10, ge=1, le=500, description="Number of scores per page"),
     force_refresh: bool = Query(False, description="Force refresh from ESPN API"),
-    detailed_conferences: str = Query(None, description="Comma-separated list of conference names to include detailed games from (e.g., 'Big 12,SEC,Big Ten')")
+    collections: str = Query(None, description="Comma-separated list of collections to include games from (e.g., 'big_sky,cfb_top_25,mcbb_top_25')")
 ) -> Dict[str, Any]:
-    """Get live games, recently finished games (final games that started within the last 12 hours), and upcoming games within the next 18 hours (timezone-aware for US) from specified sport or all sports. Optionally include detailed conference games."""
+    """Get live games, recently finished games (final games that started within the last 12 hours), and upcoming games within the next 18 hours (timezone-aware for US) from specified sport or all sports. Optionally include games from specific collections."""
     
     # Define the sports we want to check
     if sport:
@@ -480,9 +509,9 @@ async def get_live_scores(
         ]
         cache_key = "live_scores_all_sports"
     
-    # Add detailed_conferences to cache key if specified
-    if detailed_conferences:
-        cache_key += f"_conf_{detailed_conferences.replace(',', '_').replace(' ', '')}"
+    # Add collections to cache key if specified
+    if collections:
+        cache_key += f"_coll_{collections.replace(',', '_').replace(' ', '')}"
     
     # Check cache unless force refresh is requested
     cached_scores = None if force_refresh else cache.get(cache_key)
@@ -492,84 +521,99 @@ async def get_live_scores(
     if cached_scores:
         all_live_scores = cached_scores
     else:
-        # Fetch scores from all sports
         current_time = datetime.now(timezone.utc)
+        collection_scores = []
         
-        for espn_sport_format in sports_to_check:
-            try:
-                scores = await espn_service.fetch_scores(sport=espn_sport_format, limit=50)
-                
-                # Filter for live games, recently finished games, or upcoming games within 18 hours
-                for score in scores:
-                    game_date = datetime.fromisoformat(score['date'].replace('Z', '+00:00'))
-                    status = score['status']
-                    
-                    # Use helper function to check if game should be included
-                    if is_game_in_live_window(game_date, status, current_time):
-                        
-                        # Add sport info to the score data
-                        score['sport'] = espn_sport_format
-                        score['sport_display'] = espn_sport_format.replace('/', ' ').title().replace('Nba', 'NBA').replace('Nfl', 'NFL').replace('Mlb', 'MLB').replace('Nhl', 'NHL')
-                        all_live_scores.append(score)
-                        
-            except Exception as e:
-                # Continue with other sports if one fails
-                print(f"Error fetching {espn_sport_format}: {e}")
-                continue
-        
-        # Fetch detailed conference games if requested
-        if detailed_conferences:
-            conference_scores = []
-            conference_list = [conf.strip() for conf in detailed_conferences.split(',')]
+        # Fetch collection games first if requested
+        if collections:
+            collection_list = [coll.strip() for coll in collections.split(',')]
             
-            # Get the conference groups mapping
-            conference_groups = get_conference_groups()
+            # Get the collection groups mapping
+            collection_groups = get_collection_groups()
             
-            # Fetch games for each specified conference
-            for conference_name in conference_list:
-                # Normalize conference name to match our mapping
-                conference_key = conference_name.lower().replace(' ', '').replace('-', '_')
+            # Fetch games for each specified collection
+            for collection_name in collection_list:
+                # Normalize collection name to match our mapping
+                collection_key = collection_name.lower().replace(' ', '').replace('-', '_')
                 
-                if conference_key in conference_groups:
+                if collection_key in collection_groups:
                     # Get groups for both basketball and football
                     for sport_key in ["basketball_mens-college", "football_college"]:
-                        if sport_key in conference_groups[conference_key]:
-                            groups = conference_groups[conference_key][sport_key]
+                        if sport_key in collection_groups[collection_key]:
+                            groups = collection_groups[collection_key][sport_key]
                             
                             # Convert sport key to ESPN API format
                             espn_sport = convert_sport_format(sport_key)
                             
                             for group_id in groups:
                                 try:
-                                    games = await espn_service.fetch_conference_games(espn_sport, group_id)
+                                    # Handle special case for top 25 filtering
+                                    if group_id == "top25":
+                                        games = await espn_service.fetch_top25_games(espn_sport)
+                                    else:
+                                        games = await espn_service.fetch_conference_games(espn_sport, group_id)
                                     
                                     for game in games:
                                         # Add sport info to the game data
                                         game['sport'] = espn_sport
                                         game['sport_display'] = espn_sport.replace('/', ' ').title().replace('Nba', 'NBA').replace('Nfl', 'NFL').replace('Mlb', 'MLB').replace('Nhl', 'NHL')
-                                        conference_scores.append(game)
+                                        collection_scores.append(game)
                                         
                                 except Exception as e:
                                     print(f"Error fetching conference group {group_id} for {sport_key}: {e}")
                                     continue
+        
+        # Check if we have more than 25 collection results
+        if collections and len(collection_scores) > 25:
+            # If we have more than 25 collection games, just use those
+            all_live_scores = collection_scores
+        else:
+            # Determine if we should use tight time window
+            # Use tight window when we have collection games to prioritize or when we have collections specified
+            use_tight_window = collections is not None
             
-            # Combine and deduplicate (live scores take precedence)
-            seen_ids = set()
-            combined_scores = []
+            # Fetch scores from all sports to supplement
+            for espn_sport_format in sports_to_check:
+                try:
+                    scores = await espn_service.fetch_scores(sport=espn_sport_format, limit=50)
+                    
+                    # Filter for live games, recently finished games, or upcoming games
+                    for score in scores:
+                        game_date = datetime.fromisoformat(score['date'].replace('Z', '+00:00'))
+                        status = score['status']
+                        
+                        # Use helper function to check if game should be included
+                        # Use tight window when we have conference preferences to prioritize recent/current games
+                        if is_game_in_live_window(game_date, status, current_time, tight_window=use_tight_window):
+                            
+                            # Add sport info to the score data
+                            score['sport'] = espn_sport_format
+                            score['sport_display'] = espn_sport_format.replace('/', ' ').title().replace('Nba', 'NBA').replace('Nfl', 'NFL').replace('Mlb', 'MLB').replace('Nhl', 'NHL')
+                            all_live_scores.append(score)
+                            
+                except Exception as e:
+                    # Continue with other sports if one fails
+                    print(f"Error fetching {espn_sport_format}: {e}")
+                    continue
             
-            # Add live scores first (these take priority)
-            for score in all_live_scores:
-                if score['id'] not in seen_ids:
-                    seen_ids.add(score['id'])
-                    combined_scores.append(score)
-            
-            # Add conference scores that aren't already included
-            for score in conference_scores:
-                if score['id'] not in seen_ids:
-                    seen_ids.add(score['id'])
-                    combined_scores.append(score)
-            
-            all_live_scores = combined_scores
+            # Combine collection games with general live games and deduplicate
+            if collection_scores:
+                seen_ids = set()
+                combined_scores = []
+                
+                # Add collection scores first (these take priority)
+                for score in collection_scores:
+                    if score['id'] not in seen_ids:
+                        seen_ids.add(score['id'])
+                        combined_scores.append(score)
+                
+                # Add general live scores that aren't already included
+                for score in all_live_scores:
+                    if score['id'] not in seen_ids:
+                        seen_ids.add(score['id'])
+                        combined_scores.append(score)
+                
+                all_live_scores = combined_scores
         
         # Sort by game date (most recent first)
         all_live_scores.sort(key=lambda x: x['date'], reverse=True)
@@ -594,8 +638,8 @@ async def get_live_scores(
     base_params = {}
     if sport:
         base_params["sport"] = sport
-    if detailed_conferences:
-        base_params["detailed_conferences"] = detailed_conferences
+    if collections:
+        base_params["collections"] = collections
         
     pagination_response = build_pagination_response(
         request=request,
