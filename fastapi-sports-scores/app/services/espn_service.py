@@ -71,7 +71,7 @@ class ESPNService:
                     if response.status == 200:
                         data = await response.json()
                         
-                        # For NFL, get live stats from boxscore.players
+                        # For football (NFL and college), get stats from boxscore.players
                         boxscore = data.get('boxscore', {})
                         players_data = boxscore.get('players', [])
                         
@@ -307,6 +307,8 @@ class ESPNService:
                         # Transform the game data
                         transformed_game = self._transform_event(game)
                         if transformed_game:
+                            # Populate top_performers for the transformed game
+                            transformed_game['top_performers'] = await self._get_top_performers(game, sport)
                             top25_games.append(transformed_game)
                 
                 logger.info(f"Found {len(top25_games)} top 25 games")
@@ -405,15 +407,16 @@ class ESPNService:
             competition = competitions[0]
             competitors = competition.get('competitors', [])
             
-            # For NFL games that are in progress, always try to fetch live stats
-            # from the game summary endpoint regardless of leaders data
-            if 'nfl' in sport:
+            # For football games (NFL and college), always try to fetch detailed stats
+            # from the game summary endpoint since football scoreboard often lacks comprehensive leaders data
+            if 'football' in sport:
                 status = competition.get('status', {}).get('type', {}).get('description', '')
-                if status in ['In Progress', 'Halftime', '1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter']:
+                # Fetch detailed stats for in-progress games and recently finished games
+                if status in ['In Progress', 'Halftime', '1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter', 'Final']:
                     event_id = event.get('id')
                     if event_id:
                         # Use correct ESPN API sport format for summary endpoint
-                        summary_sport = 'football/nfl' if 'nfl' in sport else sport
+                        summary_sport = sport  # Keep the original sport format (football/nfl or football/college-football)
                         summary_performers = await self._get_performers_from_summary(event_id, summary_sport)
                         if summary_performers:
                             return summary_performers
