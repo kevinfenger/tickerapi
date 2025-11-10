@@ -253,6 +253,8 @@ class ESPNService:
                     for event in events:
                         transformed_game = self._transform_event(event)
                         if transformed_game:
+                            # Populate top_performers for the transformed game
+                            transformed_game['top_performers'] = await self._get_top_performers(event, sport)
                             games.append(transformed_game)
                     
                     # Enrich in-progress games with detailed status
