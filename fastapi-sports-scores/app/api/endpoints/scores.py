@@ -202,6 +202,21 @@ def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
         }
     }
 
+def get_basic_sport_filters() -> Dict[str, str]:
+    """Get basic sport filtering options for collections parameter"""
+    return {
+        'nfl': 'football/nfl',
+        'nba': 'basketball/nba',
+        'mlb': 'baseball/mlb',
+        'nhl': 'hockey/nhl',
+        'cfb': 'football/college-football',
+        'mcbb': 'basketball/mens-college-basketball',
+        'college_football': 'football/college-football',
+        'college_basketball': 'basketball/mens-college-basketball',
+        'premier_league': 'soccer/eng.1',
+        'mls': 'soccer/usa.1'
+    }
+
 def get_sport_examples() -> Dict[str, Any]:
     """Get available sports with user-friendly format"""
     return {
@@ -523,6 +538,7 @@ async def get_live_scores(
     else:
         current_time = datetime.now(timezone.utc)
         collection_scores = []
+        sport_filters_requested = []
         
         # Fetch collection games first if requested
         if collections:
@@ -531,9 +547,25 @@ async def get_live_scores(
             # Get the collection groups mapping
             collection_groups = get_collection_groups()
             
-            # Fetch games for each specified collection
+            # Get basic sport filtering options
+            basic_sport_filters = get_basic_sport_filters()
+            
+            # Check if any collection is actually a basic sport filter
+            sport_filters_requested = []
+            actual_collections = []
+            
             for collection_name in collection_list:
-                # Normalize collection name to match our mapping
+                collection_key = collection_name.lower().replace(' ', '').replace('-', '_')
+                
+                if collection_key in basic_sport_filters:
+                    # This is a sport filter, not a collection
+                    sport_filters_requested.append(basic_sport_filters[collection_key])
+                else:
+                    # This is an actual collection
+                    actual_collections.append(collection_name)
+            
+            # Fetch games for each actual collection (not sport filters)
+            for collection_name in actual_collections:
                 collection_key = collection_name.lower().replace(' ', '').replace('-', '_')
                 
                 if collection_key in collection_groups:
@@ -569,32 +601,43 @@ async def get_live_scores(
             all_live_scores = collection_scores
         else:
             # Determine if we should use tight time window
-            # Use tight window when we have collection games to prioritize or when we have collections specified
-            use_tight_window = collections is not None
+            # Use tight window when pulling from generic results (no collections specified)
+            # Use normal window when user specifies collections (they want all games from their collections)
+            use_tight_window = collections is None
             
-            # Fetch scores from all sports to supplement
-            for espn_sport_format in sports_to_check:
-                try:
-                    scores = await espn_service.fetch_scores(sport=espn_sport_format, limit=50)
-                    
-                    # Filter for live games, recently finished games, or upcoming games
-                    for score in scores:
-                        game_date = datetime.fromisoformat(score['date'].replace('Z', '+00:00'))
-                        status = score['status']
+            # Determine which sports to fetch based on sport filters
+            # Only fetch general sports if no collections OR if we have sport filters
+            should_fetch_general_sports = collections is None or len(sport_filters_requested) > 0
+            
+            if should_fetch_general_sports:
+                sports_to_fetch = sports_to_check
+                if sport_filters_requested:
+                    # If specific sport filters were requested, only fetch those sports
+                    sports_to_fetch = sport_filters_requested
+                
+                # Fetch scores from sports to supplement
+                for espn_sport_format in sports_to_fetch:
+                    try:
+                        scores = await espn_service.fetch_scores(sport=espn_sport_format, limit=50)
                         
-                        # Use helper function to check if game should be included
-                        # Use tight window when we have conference preferences to prioritize recent/current games
-                        if is_game_in_live_window(game_date, status, current_time, tight_window=use_tight_window):
+                        # Filter for live games, recently finished games, or upcoming games
+                        for score in scores:
+                            game_date = datetime.fromisoformat(score['date'].replace('Z', '+00:00'))
+                            status = score['status']
                             
-                            # Add sport info to the score data
-                            score['sport'] = espn_sport_format
-                            score['sport_display'] = espn_sport_format.replace('/', ' ').title().replace('Nba', 'NBA').replace('Nfl', 'NFL').replace('Mlb', 'MLB').replace('Nhl', 'NHL')
-                            all_live_scores.append(score)
-                            
-                except Exception as e:
-                    # Continue with other sports if one fails
-                    print(f"Error fetching {espn_sport_format}: {e}")
-                    continue
+                            # Use helper function to check if game should be included
+                            # Use tight window when we have conference preferences to prioritize recent/current games
+                            if is_game_in_live_window(game_date, status, current_time, tight_window=use_tight_window):
+                                
+                                # Add sport info to the score data
+                                score['sport'] = espn_sport_format
+                                score['sport_display'] = espn_sport_format.replace('/', ' ').title().replace('Nba', 'NBA').replace('Nfl', 'NFL').replace('Mlb', 'MLB').replace('Nhl', 'NHL')
+                                all_live_scores.append(score)
+                                
+                    except Exception as e:
+                        # Continue with other sports if one fails
+                        print(f"Error fetching {espn_sport_format}: {e}")
+                        continue
             
             # Combine collection games with general live games and deduplicate
             if collection_scores:
@@ -652,11 +695,36 @@ async def get_live_scores(
     )
     
     # Add live-specific info to the response
+    filter_description = "All sports"
+    if sport:
+        filter_description = f"Specific sport: {sport}"
+    elif collections:
+        # Check if collections included sport filters
+        collection_list = [coll.strip() for coll in collections.split(',')]
+        basic_sport_filters = get_basic_sport_filters()
+        
+        sport_filters = []
+        other_collections = []
+        
+        for coll in collection_list:
+            coll_key = coll.lower().replace(' ', '').replace('-', '_')
+            if coll_key in basic_sport_filters:
+                sport_filters.append(coll)
+            else:
+                other_collections.append(coll)
+        
+        if sport_filters and other_collections:
+            filter_description = f"Sports: {', '.join(sport_filters)}, Collections: {', '.join(other_collections)}"
+        elif sport_filters:
+            filter_description = f"Sports: {', '.join(sport_filters)}"
+        else:
+            filter_description = f"Collections: {', '.join(other_collections)}"
+    
     pagination_response["info"] = {
         "description": "Live games or recently finished games (final games that started within the last 4 hours)",
         "sports_checked": sports_to_check,
         "cache_duration": "2 minutes",
-        "filter": f"Specific sport: {sport}" if sport else "All sports"
+        "filter": filter_description
     }
     
     return pagination_response
