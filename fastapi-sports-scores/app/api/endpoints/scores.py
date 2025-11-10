@@ -86,7 +86,7 @@ def convert_sport_format(sport: str) -> str:
     # Handle special cases where we simplified the user format but ESPN still expects the full path
     sport_mappings = {
         "basketball_mens-college": "basketball/mens-college-basketball",
-        "football_college": "football/college-football"
+        "college_football": "football/college-football"
     }
     
     if sport in sport_mappings:
@@ -167,11 +167,11 @@ def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
     return {
         "big sky": {
             "basketball_mens-college": [5],  # Group 5 is Big Sky for basketball
-            "football_college": [20]  # Group 20 is Big Sky for football
+            "college_football": [20]  # Group 20 is Big Sky for football
         },
         "big_sky": {  # Allow underscore version
             "basketball_mens-college": [5],
-            "football_college": [20]
+            "college_football": [20]
         },
         "big 12": {
             "basketball_mens-college": [21],  # Group 21 is Big 12 for basketball
@@ -180,22 +180,22 @@ def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
             "basketball_mens-college": [21],
         },
         "mvfc": {
-            "football_college": [21]  # Group 21 is MVFC for football
+            "college_football": [21]  # Group 21 is MVFC for football
         },
         "missouri_valley": {  # Allow full name version
-            "football_college": [21]
+            "college_football": [21]
         },
         "fcs": {
-            "football_college": [81]  # Group 81 is FCS football
+            "college_football": [81]  # Group 81 is FCS football
         },
         "fcs football": {  # Allow full name version
-            "football_college": [81]
+            "college_football": [81]
         },
-        "football_college": {
-            "football_college": [90]  # Group 90 is all NCAA football (FBS + FCS)
+        "college_football": {
+            "college_football": [90]  # Group 90 is all NCAA football (FBS + FCS)
         },
         "cfb_top_25": {
-            "football_college": ["top25"]  # Special identifier for top 25 filtering
+            "college_football": ["top25"]  # Special identifier for top 25 filtering
         },
         "mcbb_top_25": {
             "basketball_mens-college": ["top25"]  # Special identifier for men's college basketball top 25 filtering
@@ -212,8 +212,12 @@ def get_basic_sport_filters() -> Dict[str, str]:
         'cfb': 'football/college-football',
         'mcbb': 'basketball/mens-college-basketball',
         'college_football': 'football/college-football',
-        'college_basketball': 'basketball/mens-college-basketball',
+        'mens_college_basketball': 'basketball/mens-college-basketball',
+        'womens_college_basketball': 'basketball/womens-college-basketball',
+        'wnba': 'basketball/wnba',
+        'college_baseball': 'baseball/college-baseball',
         'premier_league': 'soccer/eng.1',
+        'champions_league': 'soccer/uefa.champions',
         'mls': 'soccer/usa.1'
     }
 
@@ -222,12 +226,13 @@ def get_sport_examples() -> Dict[str, Any]:
     return {
         "basketball": {
             "nba": "basketball_nba",
-            "college": "basketball_mens-college", 
+            "mens_college": "basketball_mens-college",
+            "womens_college": "basketball_womens-college-basketball", 
             "wnba": "basketball_wnba"
         },
         "football": {
             "nfl": "football_nfl",
-            "college": "football_college"
+            "college": "college_football"
         },
         "baseball": {
             "mlb": "baseball_mlb",
@@ -374,7 +379,7 @@ async def get_conferences(
 async def get_conference_games(
     request: Request,
     conference_name: str,
-    sport: str = Query("basketball_mens-college", description="Sport type (basketball_mens-college, football_college)"),
+    sport: str = Query("basketball_mens-college", description="Sport type (basketball_mens-college, college_football)"),
     page: int = Query(1, description="Page number", ge=1),
     page_size: int = Query(10, description="Number of scores per page", ge=1, le=500),
     force_refresh: bool = Query(False, description="Force refresh cache")
@@ -570,7 +575,7 @@ async def get_live_scores(
                 
                 if collection_key in collection_groups:
                     # Get groups for both basketball and football
-                    for sport_key in ["basketball_mens-college", "football_college"]:
+                    for sport_key in ["basketball_mens-college", "college_football"]:
                         if sport_key in collection_groups[collection_key]:
                             groups = collection_groups[collection_key][sport_key]
                             
