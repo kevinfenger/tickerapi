@@ -692,6 +692,30 @@ async def get_live_scores(
         # Sort by sport priority first, then by date within each sport
         all_live_scores.sort(key=lambda x: (get_sport_priority(x['sport']), x['date']))
         
+        # Enrich in-progress games with detailed status information
+        # Group games by sport for efficient enrichment
+        games_by_sport = {}
+        for game in all_live_scores:
+            sport = game['sport']
+            if sport not in games_by_sport:
+                games_by_sport[sport] = []
+            games_by_sport[sport].append(game)
+        
+        # Enrich each sport's games
+        enriched_games = []
+        for sport, games in games_by_sport.items():
+            try:
+                enriched_sport_games = await espn_service._enrich_with_detailed_status(games, sport)
+                enriched_games.extend(enriched_sport_games)
+            except Exception as e:
+                print(f"Error enriching {sport} games: {e}")
+                # If enrichment fails, use original games
+                enriched_games.extend(games)
+        
+        # Maintain the same sorting after enrichment
+        enriched_games.sort(key=lambda x: (get_sport_priority(x['sport']), x['date']))
+        all_live_scores = enriched_games
+        
         # Cache the results for 2 minutes (shorter cache for live data)
         cache.set(cache_key, all_live_scores, expiration_minutes=2)
     
