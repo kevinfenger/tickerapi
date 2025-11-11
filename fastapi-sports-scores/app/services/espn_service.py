@@ -198,7 +198,9 @@ class ESPNService:
             'abbreviation': abbreviation,  # Team abbreviation with custom conversions
             'score': competitor.get('score', '0'),
             'conference': 'Unknown',  # Simplified - no longer trying to detect conference
-            'rank': rank
+            'rank': rank,
+            'color': team_info.get('color', ''),  # Primary team color (hex format)
+            'alternateColor': team_info.get('alternateColor', '')  # Alternate team color (hex format)
         }
     
     def _convert_team_abbreviation(self, abbreviation: str) -> str:
