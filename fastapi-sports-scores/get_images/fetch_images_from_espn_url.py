@@ -196,35 +196,87 @@ def determine_output_directory(espn_url):
         print(f"Warning: Could not parse URL for directory name: {e}")
         return "sport_logos/espn_teams"
 
+def download_single_logo(logo_url, team_abbr, team_name, output_dir):
+    """Download and process a single logo from a direct URL"""
+    team_data = {
+        'abbreviation': team_abbr,
+        'name': team_name,
+        'logo_url': logo_url
+    }
+    return download_and_process_team_logo(team_data, output_dir)
+
 def main():
-    parser = argparse.ArgumentParser(description="Fetch team logos from ESPN API URL and process them for LED displays")
-    parser.add_argument("espn_url", help="ESPN API URL to fetch teams from")
+    parser = argparse.ArgumentParser(description="Fetch team logos from ESPN API URL or process individual logo URLs")
+    parser.add_argument("input_url", help="ESPN API URL to fetch teams from, OR direct logo image URL")
     parser.add_argument("--output-dir", help="Custom output directory (optional)")
+    parser.add_argument("--team-abbr", help="Team abbreviation (required when using direct logo URL)")
+    parser.add_argument("--team-name", help="Team name (optional, defaults to abbreviation)")
     
     args = parser.parse_args()
     
-    espn_url = args.espn_url
+    input_url = args.input_url
     
-    # Determine output directory
-    if args.output_dir:
-        output_dir = args.output_dir
+    # Check if this is a direct image URL or ESPN API URL
+    is_direct_image = input_url.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg'))
+    
+    if is_direct_image:
+        # Handle single logo download
+        if not args.team_abbr:
+            print("Error: --team-abbr is required when using direct logo URLs")
+            return 1
+        
+        team_abbr = args.team_abbr
+        team_name = args.team_name or team_abbr
+        
+        # Determine output directory
+        output_dir = args.output_dir or "/tmp/logo_temp"
+        
+        # Create output directory if it doesn't exist
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created directory: {output_dir}")
+        
+        print("🎯 Processing Single Logo")
+        print("=" * 40)
+        print(f"Logo URL: {input_url}")
+        print(f"Team: {team_name} ({team_abbr})")
+        print(f"Output: {output_dir}")
+        print("=" * 40)
+        
+        success = download_single_logo(input_url, team_abbr, team_name, output_dir)
+        
+        if success:
+            print(f"✅ Successfully processed logo for {team_abbr}")
+            print(f"📁 File saved: {output_dir}/{team_abbr}.bmp")
+            return 0
+        else:
+            print(f"❌ Failed to process logo for {team_abbr}")
+            return 1
+    
     else:
-        output_dir = determine_output_directory(espn_url)
-    
-    # Create output directory if it doesn't exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"Created directory: {output_dir}")
-    
-    print("🏈 Fetching Teams from ESPN API")
-    print("=" * 60)
-    print(f"URL: {espn_url}")
-    print(f"Output: {output_dir}")
-    print(f"Processing: Using proven process() function from get_images.py")
-    print("=" * 60)
-    
-    # Fetch teams from ESPN API
-    teams = fetch_teams_from_espn_url(espn_url)
+        # Handle ESPN API URL (original functionality)
+        espn_url = input_url
+        
+        # Determine output directory
+        if args.output_dir:
+            output_dir = args.output_dir
+        else:
+            output_dir = determine_output_directory(espn_url)
+        
+        # Create output directory if it doesn't exist
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"Created directory: {output_dir}")
+        
+        print("🏈 Fetching Teams from ESPN API")
+        print("=" * 60)
+        print(f"URL: {espn_url}")
+        print(f"Output: {output_dir}")
+        print(f"Processing: Using proven process() function from get_images.py")
+        print("=" * 60)
+        
+        # Fetch teams from ESPN API
+        teams = fetch_teams_from_espn_url(espn_url)
     
     if not teams:
         print("No teams found or error occurred")

@@ -109,6 +109,7 @@ def convert_sport_format(sport: str) -> str:
     # Handle special cases where we simplified the user format but ESPN still expects the full path
     sport_mappings = {
         "basketball_mens-college": "basketball/mens-college-basketball",
+        "basketball_womens-college": "basketball/womens-college-basketball",
         "college_football": "football/college-football"
     }
     
@@ -186,8 +187,350 @@ def build_pagination_response(
     }
 
 def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
-    """Get the conference to ESPN group mapping"""
+    """Get the conference to ESPN group mapping with granular sport-specific collections"""
     return {
+        # GRANULAR SPORT-SPECIFIC COLLECTIONS (New preferred format)
+        
+        # Atlantic 10 Conference (A-10)
+        "a_10_mens_basketball": {
+            "basketball_mens-college": [3]  # Group 3 is A-10 for men's basketball
+        },
+        "a_10_womens_basketball": {
+            "basketball_womens-college": [3]  # Group 3 is A-10 for women's basketball
+        },
+        
+        # Big East Conference
+        "big_east_mens_basketball": {
+            "basketball_mens-college": [4]  # Group 4 is Big East for men's basketball
+        },
+        "big_east_womens_basketball": {
+            "basketball_womens-college": [4]  # Group 4 is Big East for women's basketball
+        },
+        
+        # Big 12 Conference  
+        "big_12_football": {
+            "college_football": [4]  # Group 4 is Big 12 for football
+        },
+        
+        # Big Ten Conference
+        "big_ten_football": {
+            "college_football": [5]  # Group 5 is Big Ten for football
+        },
+        
+        # ACC Conference
+        "acc_mens_basketball": {
+            "basketball_mens-college": [2]  # Group 2 is ACC for men's basketball
+        },
+        "acc_womens_basketball": {
+            "basketball_womens-college": [2]  # Group 2 is ACC for women's basketball
+        },
+        "acc_football": {
+            "college_football": [1]  # Group 1 is ACC for football
+        },
+        
+        # America East Conference
+        "america_east_mens_basketball": {
+            "basketball_mens-college": [1]  # Group 1 is America East for men's basketball
+        },
+        "america_east_womens_basketball": {
+            "basketball_womens-college": [1]  # Group 1 is America East for women's basketball
+        },
+        
+        # Big Sky Conference
+        "big_sky_mens_basketball": {
+            "basketball_mens-college": [5]  # Group 5 is Big Sky for men's basketball (Group 49 is identical alternative)
+        },
+        "big_sky_womens_basketball": {
+            "basketball_womens-college": [5]  # Group 5 is Big Sky for women's basketball (Group 47 is identical alternative)
+        },
+        "big_sky_football": {
+            "college_football": [20]  # Group 20 is Big Sky for football
+        },
+        
+        # Big 12 Conference  
+        "big_12_mens_basketball": {
+            "basketball_mens-college": [8]  # Group 8 is Big 12 for men's basketball
+        },
+        "big_12_womens_basketball": {
+            "basketball_womens-college": [8]  # Group 8 is Big 12 for women's basketball
+        },
+        "big_12_football": {
+            "college_football": [4]  # Group 4 is Big 12 for football
+        },
+        
+        # SEC Conference
+        "sec_mens_basketball": {
+            "basketball_mens-college": [23]  # Group 23 is SEC for men's basketball
+        },
+        "sec_womens_basketball": {
+            "basketball_womens-college": [23]  # Group 23 is SEC for women's basketball (same group)
+        },
+        "sec_football": {
+            "college_football": [8]  # Group 8 is SEC for football
+        },
+        
+        # ACC Conference
+        "acc_mens_basketball": {
+            "basketball_mens-college": [2]  # Group 2 is ACC for men's basketball
+        },
+        "acc_womens_basketball": {
+            "basketball_womens-college": [2]  # Group 2 is ACC for women's basketball (same group)
+        },
+        "acc_football": {
+            "college_football": [1]  # Group 1 is ACC for football
+        },
+        
+        # Big Ten Conference
+        "big_ten_mens_basketball": {
+            "basketball_mens-college": [7]  # Group 7 is Big Ten for men's basketball
+        },
+        "big_ten_womens_basketball": {
+            "basketball_womens-college": [7]  # Group 7 is Big Ten for women's basketball (same group)
+        },
+        "big_ten_football": {
+            "college_football": [5]  # Group 5 is Big Ten for football
+        },
+        
+        # Big West Conference
+        "big_west_mens_basketball": {
+            "basketball_mens-college": [9]  # Group 9 is Big West for men's basketball
+        },
+        "big_west_womens_basketball": {
+            "basketball_womens-college": [9]  # Group 9 is Big West for women's basketball
+        },
+        
+        # Coastal Athletic Association
+        "coastal_mens_basketball": {
+            "basketball_mens-college": [10]  # Group 10 is Coastal for men's basketball
+        },
+        "coastal_womens_basketball": {
+            "basketball_womens-college": [10]  # Group 10 is Coastal for women's basketball
+        },
+        
+        # Conference USA (C-USA)
+        "conference_usa_mens_basketball": {
+            "basketball_mens-college": [11]  # Group 11 is Conference USA for men's basketball
+        },
+        "conference_usa_womens_basketball": {
+            "basketball_womens-college": [11]  # Group 11 is Conference USA for women's basketball
+        },
+        "conference_usa_football": {
+            "college_football": [12]  # Group 12 is Conference USA for football
+        },
+        
+        # Ivy League
+        "ivy_league_mens_basketball": {
+            "basketball_mens-college": [12]  # Group 12 is Ivy League for men's basketball
+        },
+        "ivy_league_womens_basketball": {
+            "basketball_womens-college": [12]  # Group 12 is Ivy League for women's basketball
+        },
+        
+        # Metro Atlantic Athletic Conference (MAAC)
+        "maac_mens_basketball": {
+            "basketball_mens-college": [13]  # Group 13 is MAAC for men's basketball
+        },
+        "maac_womens_basketball": {
+            "basketball_womens-college": [13]  # Group 13 is MAAC for women's basketball
+        },
+        
+        # Mid-American Conference (MAC)
+        "mac_mens_basketball": {
+            "basketball_mens-college": [14]  # Group 14 is MAC for men's basketball
+        },
+        "mac_womens_basketball": {
+            "basketball_womens-college": [14]  # Group 14 is MAC for women's basketball
+        },
+        "mac_football": {
+            "college_football": [15]  # Group 15 is MAC for football
+        },
+        
+        # Mid-Eastern Athletic Conference (MEAC)
+        "meac_mens_basketball": {
+            "basketball_mens-college": [16]  # Group 16 is MEAC for men's basketball
+        },
+        "meac_womens_basketball": {
+            "basketball_womens-college": [16]  # Group 16 is MEAC for women's basketball
+        },
+        
+        # Mountain West Conference
+        "mountain_west_football": {
+            "college_football": [17]  # Group 17 is Mountain West for football
+        },
+        
+        # Missouri Valley Conference (MVC)
+        "missouri_valley_mens_basketball": {
+            "basketball_mens-college": [18]  # Group 18 is Missouri Valley for men's basketball
+        },
+        "missouri_valley_womens_basketball": {
+            "basketball_womens-college": [18]  # Group 18 is Missouri Valley for women's basketball
+        },
+        
+        # Northeast Conference (NEC)
+        "northeast_mens_basketball": {
+            "basketball_mens-college": [19]  # Group 19 is Northeast for men's basketball
+        },
+        "northeast_womens_basketball": {
+            "basketball_womens-college": [19]  # Group 19 is Northeast for women's basketball
+        },
+        
+        # Ohio Valley Conference (OVC)
+        "ohio_valley_mens_basketball": {
+            "basketball_mens-college": [20]  # Group 20 is Ohio Valley for men's basketball
+        },
+        "ohio_valley_womens_basketball": {
+            "basketball_womens-college": [20]  # Group 20 is Ohio Valley for women's basketball
+        },
+        
+        # Pac-12 Conference (or Pac-whatever it is now)
+        "pac_12_mens_basketball": {
+            "basketball_mens-college": [21]  # Group 21 is Pac-12 for men's basketball
+        },
+        "pac_12_womens_basketball": {
+            "basketball_womens-college": [21]  # Group 21 is Pac-12 for women's basketball
+        },
+        
+        # Patriot League
+        "patriot_league_mens_basketball": {
+            "basketball_mens-college": [22]  # Group 22 is Patriot League for men's basketball
+        },
+        "patriot_league_womens_basketball": {
+            "basketball_womens-college": [22]  # Group 22 is Patriot League for women's basketball
+        },
+        
+        # Southern Conference (SoCon)
+        "southern_mens_basketball": {
+            "basketball_mens-college": [24]  # Group 24 is Southern for men's basketball
+        },
+        "southern_womens_basketball": {
+            "basketball_womens-college": [24]  # Group 24 is Southern for women's basketball
+        },
+        
+        # Southland Conference
+        "southland_mens_basketball": {
+            "basketball_mens-college": [25]  # Group 25 is Southland for men's basketball
+        },
+        "southland_womens_basketball": {
+            "basketball_womens-college": [25]  # Group 25 is Southland for women's basketball
+        },
+        
+        # Southwestern Athletic Conference (SWAC)
+        "swac_mens_basketball": {
+            "basketball_mens-college": [26]  # Group 26 is SWAC for men's basketball
+        },
+        "swac_womens_basketball": {
+            "basketball_womens-college": [26]  # Group 26 is SWAC for women's basketball
+        },
+        
+        # Sun Belt Conference
+        "sun_belt_mens_basketball": {
+            "basketball_mens-college": [27]  # Group 27 is Sun Belt for men's basketball
+        },
+        "sun_belt_womens_basketball": {
+            "basketball_womens-college": [27]  # Group 27 is Sun Belt for women's basketball
+        },
+        
+        # Patriot League Football
+        "patriot_league_football": {
+            "college_football": [27]  # Group 27 is Patriot League for football
+        },
+        
+        # WCC (West Coast Conference) Basketball
+        "wcc_mens_basketball": {
+            "basketball_mens-college": [29]  # Group 29 is WCC for men's basketball
+        },
+        "wcc_womens_basketball": {
+            "basketball_womens-college": [29]  # Group 29 is WCC for women's basketball
+        },
+        
+        # Southern Conference Football
+        "southern_football": {
+            "college_football": [29]  # Group 29 is Southern for football
+        },
+        
+        # WAC (Western Athletic Conference) Basketball
+        "wac_mens_basketball": {
+            "basketball_mens-college": [30]  # Group 30 is WAC for men's basketball
+        },
+        "wac_womens_basketball": {
+            "basketball_womens-college": [30]  # Group 30 is WAC for women's basketball
+        },
+        
+        # UAC (United Athletic Conference) Football
+        "uac_football": {
+            "college_football": [30]  # Group 30 is UAC for football
+        },
+        
+        # SWAC (Southwestern Athletic Conference) Football
+        "swac_football": {
+            "college_football": [31]  # Group 31 is SWAC for football
+        },
+        
+        # Division III Football
+        "d3_football": {
+            "college_football": [35]  # Group 35 is Division III football (Group 58 is subset with 8 games)
+        },
+        
+        # Division II Football
+        "d2_football": {
+            "college_football": [57]  # Group 57 is Division II football
+        },
+        
+        # Horizon League Basketball
+        "horizon_league_mens_basketball": {
+            "basketball_mens-college": [45]  # Group 45 is Horizon League for men's basketball
+        },
+        "horizon_league_womens_basketball": {
+            "basketball_womens-college": [45]  # Group 45 is Horizon League for women's basketball
+        },
+        
+        # ASUN Conference Basketball
+        "asun_mens_basketball": {
+            "basketball_mens-college": [46]  # Group 46 is ASUN for men's basketball
+        },
+        "asun_womens_basketball": {
+            "basketball_womens-college": [46]  # Group 46 is ASUN for women's basketball
+        },
+        
+        # FBS Collections
+        "fbs_football": {
+            "college_football": [80]  # Group 80 is FBS football
+        },
+        
+        # FCS Collections
+        "fcs_football": {
+            "college_football": [81]  # Group 81 is FCS football
+        },
+        "mvfc_football": {  # Missouri Valley Football Conference
+            "college_football": [21]  # Group 21 is MVFC for football
+        },
+        
+        # Top 25 Collections
+        "cfb_top_25": {
+            "college_football": ["top25"]  # Special identifier for top 25 filtering
+        },
+        "mcbb_top_25": {
+            "basketball_mens-college": ["top25"]  # Special identifier for men's college basketball top 25 filtering
+        },
+        "wcbb_top_25": {
+            "basketball_womens-college": ["top25"]  # Special identifier for women's college basketball top 25 filtering
+        },
+        
+        # Broad Collections
+        "college_football": {
+            "college_football": [90]  # Group 90 is FBS + FCS football (Group 99 includes D2/D3 for true "all football")
+        },
+        "all_college_football": {
+            "college_football": [99]  # Group 99 is ALL college football (FBS + FCS + D2 + D3)
+        },
+        "mens_college_basketball": {
+            "basketball_mens-college": [50]  # Group 50 is all Division I men's college basketball
+        },
+        "womens_college_basketball": {
+            "basketball_womens-college": [50]  # Group 50 is all Division I women's college basketball
+        },
+        
+        # LEGACY COLLECTIONS (For backward compatibility - will map to multiple sports)
         "big sky": {
             "basketball_mens-college": [5],  # Group 5 is Big Sky for basketball
             "college_football": [20]  # Group 20 is Big Sky for football
@@ -198,9 +541,11 @@ def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
         },
         "big 12": {
             "basketball_mens-college": [21],  # Group 21 is Big 12 for basketball
+            "college_football": [4]  # Group 4 is Big 12 for football
         },
-        "big_12": {  # Allow underscore version
+        "big_12": {  # Allow underscore version (legacy)
             "basketball_mens-college": [21],
+            "college_football": [4]
         },
         "mvfc": {
             "college_football": [21]  # Group 21 is MVFC for football
@@ -213,15 +558,6 @@ def get_collection_groups() -> Dict[str, Dict[str, List[int]]]:
         },
         "fcs football": {  # Allow full name version
             "college_football": [81]
-        },
-        "college_football": {
-            "college_football": [90]  # Group 90 is all NCAA football (FBS + FCS)  
-        },
-        "cfb_top_25": {
-            "college_football": ["top25"]  # Special identifier for top 25 filtering
-        },
-        "mcbb_top_25": {
-            "basketball_mens-college": ["top25"]  # Special identifier for men's college basketball top 25 filtering
         }
     }
 
@@ -527,7 +863,7 @@ async def get_live_scores(
     page: int = Query(1, ge=1, description="Page number (starts from 1)"),
     page_size: int = Query(10, ge=1, le=500, description="Number of scores per page"),
     force_refresh: bool = Query(False, description="Force refresh from ESPN API"),
-    collections: str = Query(None, description="Comma-separated list of collections to include games from (e.g., 'big_sky,cfb_top_25,mcbb_top_25')")
+    collections: str = Query(None, description="Comma-separated list of collections to include games from. Supports granular sport-specific collections (e.g., 'big_sky_mens_basketball,big_sky_football,cfb_top_25') or legacy multi-sport collections (e.g., 'big_sky,cfb_top_25,mcbb_top_25')")
 ) -> Dict[str, Any]:
     """Get live games, recently finished games (final games that started within the last 12 hours), and upcoming games within the next 18 hours (timezone-aware for US) from specified sport or all sports. Optionally include games from specific collections."""
     
@@ -547,6 +883,7 @@ async def get_live_scores(
             "soccer/eng.1",  # Premier League
             "soccer/usa.1",  # MLS
             "basketball/mens-college-basketball",
+            "basketball/womens-college-basketball",
             "football/college-football"
         ]
         cache_key = "live_scores_all_sports"
@@ -596,8 +933,8 @@ async def get_live_scores(
                 collection_key = collection_name.lower().replace(' ', '').replace('-', '_')
                 
                 if collection_key in collection_groups:
-                    # Get groups for both basketball and football
-                    for sport_key in ["basketball_mens-college", "college_football"]:
+                    # Get groups for all supported sports
+                    for sport_key in ["basketball_mens-college", "basketball_womens-college", "college_football"]:
                         if sport_key in collection_groups[collection_key]:
                             groups = collection_groups[collection_key][sport_key]
                             
@@ -730,8 +1067,6 @@ async def get_live_scores(
     
     # Build pagination response
     base_params = {}
-    if sport:
-        base_params["sport"] = sport
     if collections:
         base_params["collections"] = collections
         
